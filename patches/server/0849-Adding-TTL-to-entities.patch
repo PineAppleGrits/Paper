@@ -1,0 +1,87 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Gino S <somiglianagino@gmail.com>
+Date: Thu, 8 Sep 2022 20:23:46 -0300
+Subject: [PATCH] Adding TTL to entities
+
+
+diff --git a/src/main/java/com/destroystokyo/paper/PaperConfig.java b/src/main/java/com/destroystokyo/paper/PaperConfig.java
+index f7a8aad4d42bcd409eb869966e3a4312e8296298..48b99e46559f73c190c3f89658de12b36292c5fc 100644
+--- a/src/main/java/com/destroystokyo/paper/PaperConfig.java
++++ b/src/main/java/com/destroystokyo/paper/PaperConfig.java
+@@ -12,6 +12,7 @@ import java.lang.reflect.Modifier;
+ import java.nio.charset.StandardCharsets;
+ import java.util.HashMap;
+ import java.util.List;
++import java.util.Locale;
+ import java.util.Map;
+ import java.util.concurrent.TimeUnit;
+ import java.util.logging.Level;
+@@ -19,6 +20,7 @@ import java.util.regex.Pattern;
+ 
+ import com.google.common.collect.Lists;
+ import net.minecraft.server.MinecraftServer;
++import net.minecraft.world.entity.EntityType;
+ import org.bukkit.Bukkit;
+ import org.bukkit.ChatColor;
+ import org.bukkit.command.Command;
+@@ -30,6 +32,9 @@ import co.aikar.timings.TimingsManager;
+ import org.spigotmc.SpigotConfig;
+ import org.spigotmc.WatchdogThread;
+ 
++import net.minecraft.core.Registry;
++
++
+ public class PaperConfig {
+ 
+     private static File CONFIG_FILE;
+@@ -233,6 +238,21 @@ public class PaperConfig {
+                 " - Server Name: " + timingsServerName);
+     }
+ 
++
++    public static Map<String, Integer> projectileTimeouts;
++	private static void projectileTimeouts() {
++        		// Set some defaults
++               getInt("entity_timeouts.SNOWBALL", -1);
++        		getInt("entity_timeouts.LLAMA_SPIT", -1);
++        		/* "entity_timeouts", "These values define a entity's maximum lifespan. If an",
++                    "entity is in this list and it has survived for longer than", "that number of ticks, then it will be removed. Setting a value to",
++                    "-1 disables this feature." */
++        for (EntityType<?> entityType : Registry.ENTITY_TYPE) {
++            			String type = EntityType.getKey(entityType).getPath().toUpperCase(Locale.ROOT);
++            			entityType.ttl = getInt("entity_timeouts." + type, -1);
++            		}
++        	}
++
+     public static boolean useDisplayNameInQuit = false;
+     private static void useDisplayNameInQuit() {
+         if (version < 21) {
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index b7c4700fd5db14c77e7ee78311dd77a754d9d41c..d735fd903953da5d73a06d84862c78b9e2a8d9e7 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -709,6 +709,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, n
+     // CraftBukkit end
+ 
+     public void baseTick() {
++        // Papel start - entity TTL
++                if (type != EntityType.PLAYER && type.ttl >= 0 && this.tickCount >= type.ttl) {
++                        remove(RemovalReason.DISCARDED);
++                        return;
++                    }
++                // Papel end - entity TTL
+         this.level.getProfiler().push("entityBaseTick");
+         if (this.isPassenger() && this.getVehicle().isRemoved()) {
+             this.stopRiding();
+diff --git a/src/main/java/net/minecraft/world/entity/EntityType.java b/src/main/java/net/minecraft/world/entity/EntityType.java
+index 1c446dba5de89698397041ee38a2e1a00bec8a56..ffdcb2ed9211a71c6d436fc04c874aaaa6819f6b 100644
+--- a/src/main/java/net/minecraft/world/entity/EntityType.java
++++ b/src/main/java/net/minecraft/world/entity/EntityType.java
+@@ -294,6 +294,7 @@ public class EntityType<T extends Entity> implements EntityTypeTest<Entity, T> {
+         return Registry.ENTITY_TYPE.getOptional(ResourceLocation.tryParse(id));
+     }
+ 
++    public int ttl = -1; // Papel - ttl
+     // Paper start - add id
+     public final String id;
+ 
